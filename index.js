@@ -1,4 +1,7 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
+const session = require('express-session');
+const flash = require('express-flash');
 // const fs = require('fs');
 // const multipart = require('connect-multiparty');
 // let multipartMiddleware = multipart({ uploadDir: './assets/imageupload' });
@@ -11,8 +14,17 @@ app.set('view engine', 'hbs'); // view engine is set to handlebars
 
 app.use('/assets', express.static(__dirname + '/assets')); // static files are served from the assets folder
 app.use(express.urlencoded({ extended: false }));
+app.use(flash());
 
-let isLogin = true;
+app.set('trust proxy', 1) // trust first proxy
+app.use(session({
+    secret: 'bismillahmembanggakanibu',
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000 // 1 day session
+    }
+}))
 
 function dhm(t) {
     var cd = 24 * 60 * 60 * 1000,
@@ -69,12 +81,11 @@ db.connect((err, client, done) => {
                 return {
                     ...item,
                     duration,
-                    isLogin
+                    isLogin: req.session.isLogin
                 }
             });
 
             data.forEach((item) => {
-
                 if (typeof (item.technologies) == 'string') {
                     item.technologies = [item.technologies];
                 }
@@ -82,7 +93,8 @@ db.connect((err, client, done) => {
 
             // console.log(data)
 
-            res.render('index', { isLogin, data });
+            // console.log(req.session.isLogin);
+            res.render('index', { isLogin: req.session.isLogin, user: req.session.user, data });
         });
 
     });
@@ -105,19 +117,29 @@ db.connect((err, client, done) => {
             projectDetail.start_date = convertddmmyyyy(start_date);
             projectDetail.end_date = convertddmmyyyy(end_date);
 
-            res.render('project-detail', { projectDetail });
+            res.render('project-detail', { isLogin: req.session.isLogin, user: req.session.user, projectDetail });
         });
     });
 
     app.get('/contact', (req, res) => {
-        res.render('contact', { isLogin });
+        res.render('contact', { isLogin: req.session.isLogin, user: req.session.user });
     });
 
     app.get('/add-project', (req, res) => {
-        res.render('add-project');
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
+        res.render('add-project', { isLogin: req.session.isLogin, user: req.session.user });
     });
 
     app.get('/edit-project/:id', (req, res) => {
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
         let id = req.params.id;
         client.query(`SELECT * FROM public.tb_project WHERE id=${id}`, (err, result) => {
             if (err) throw err;
@@ -131,11 +153,16 @@ db.connect((err, client, done) => {
             // console.log(project.start_date, project.end_date);
 
             let tech = project.technologies.toString();
-            res.render('edit-project', { project, tech });
+            res.render('edit-project', { isLogin: req.session.isLogin, user: req.session.user, project, tech });
         });
     });
 
     app.post('/edit-project/:id', (req, res) => {
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
         let id = req.params.id;
         let name = req.body.name;
         let startdate = new Date(req.body.startdate).getTime();
@@ -178,6 +205,11 @@ db.connect((err, client, done) => {
     });
 
     app.post('/add-project', (req, res) => {
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
         let name = req.body.name;
         let startdate = new Date(req.body.startdate).getTime();
         let enddate = new Date(req.body.enddate).getTime();
@@ -220,6 +252,11 @@ db.connect((err, client, done) => {
     });
 
     app.get('/delete-project/:id', (req, res) => {
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
         let id = req.params.id;
 
         client.query(`DELETE FROM public.tb_project WHERE id=${id}`, (err, result) => {
@@ -237,6 +274,82 @@ db.connect((err, client, done) => {
 
         res.redirect('/');
     });
+
+    app.get('/register', (req, res) => {
+        res.render('register');
+    });
+
+    app.post('/register', (req, res) => {
+        let { name, email, password } = req.body;
+
+        let hashedPassword = bcrypt.hashSync(password, 10);
+        let query = `INSERT INTO public.tb_user (name, email, password) VALUES ('${name}', '${email}', '${hashedPassword}')`;
+
+        client.query(query, (err, result) => {
+            if (err) throw err;
+
+            res.redirect('/login');
+        });
+    });
+
+
+    app.get('/login', (req, res) => {
+        res.render('login');
+    });
+
+    app.post('/login', (req, res) => {
+
+        let { email, password } = req.body;
+
+        let query = `SELECT * FROM public.tb_user WHERE email='${email}'`;
+
+        client.query(query, (err, result) => {
+            if (err) throw err;
+
+            if (result.rows.length == 0) {
+                req.flash('danger', 'Email not registered!');
+                return res.redirect('/login');
+            }
+
+            let isMatch = bcrypt.compareSync(password, result.rows[0].password);
+
+            if (isMatch) {
+                req.session.isLogin = true;
+                req.session.user = {
+                    id: result.rows[0].id,
+                    name: result.rows[0].name,
+                    email: result.rows[0].email
+                }
+                req.flash('success', 'Login success!');
+                res.redirect('/');
+            } else {
+                req.flash('danger', 'Password not match!');
+                res.redirect('/login');
+            }
+
+        });
+    });
+
+    app.get('/logout', (req, res) => {
+        if (!req.session.user) {
+            req.flash('danger', 'Silahkan login terlebih dahulu!');
+            return res.redirect('/login');
+        }
+
+        req.session.user = null;
+        req.session.save(function (err) {
+            if (err) next(err);
+
+            // regenerate the session, which is good practice to help
+            // guard against forms of session fixation
+            req.session.regenerate(function (err) {
+                if (err) next(err);
+
+                req.flash('success', 'Logout berhasil dilakukan!');
+                res.redirect('/');
+            })
+        })
+    })
 
 });
 

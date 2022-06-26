@@ -14,7 +14,7 @@
 
   <nav class="navbar navbar-expand-lg bg-light">
     <div class="container-fluid">
-      <img src="../assets/img/logo.png" class="img-fluid" alt="Image cannot be loaded" />
+      <img src="../assets/img/logo.png" class="img-fluid" alt="Image cannot be loaded">
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
         aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
@@ -23,14 +23,25 @@
         <ul class="navbar-nav ms-3 d-xxl-flex navbar-flex flex-grow-1">
           <div class="d-flex navbar-flex flex-grow-1">
             <li class="nav-item">
-              <a class="nav-link" aria-current="page" href="../">Home</a>
+              <a class="nav-link active" aria-current="page" href="../">Home</a>
             </li>
+            {{#if isLogin}}
             <li class="nav-item">
-              <a class="nav-link active" href="../add-project">Add Project</a>
+              <a class="nav-link" href="../add-project">Add Project</a>
             </li>
+            {{/if}}
           </div>
           <div class="d-flex me-3 flex-grow-1 nav-contact-container">
-            <a href="../contact" class="btn btn-dark rounded">Contact Me</a>
+            {{#if isLogin}}
+            <div class="mx-2">
+              <h5>Hallo, {{user.name}}</h5>
+            </div>
+            <a href="../logout" class="btn btn-dark rounded mx-2">Logout</a>
+            {{else}}
+            <a href="../login" class="btn btn-dark rounded mx-2">Login</a>
+            <a href="../register" class="btn btn-dark rounded mx-2">Register</a>
+            {{/if}}
+            <a href="../contact" class="btn btn-dark rounded mx-2">Contact Me</a>
           </div>
         </ul>
       </div>
